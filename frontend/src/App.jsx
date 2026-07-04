@@ -4,6 +4,7 @@ import ScheduledList from './components/ScheduledList'
 import NotificationAlert from './components/NotificationAlert'
 import DarkModeToggle from './components/DarkModeToggle'
 import { useSchedules } from './hooks/useSchedules'
+import wishyAvatar from './assets/wishy.png'
 
 export default function App() {
   const [dark, setDark] = useState(() => {
@@ -69,13 +70,21 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Dynamic 3D/7D background elements */}
+      <div className="floating-bubble bubble-1"></div>
+      <div className="floating-bubble bubble-2"></div>
+      <div className="floating-bubble bubble-3"></div>
+      <div className="floating-bubble bubble-4"></div>
+
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header glass-header">
         <div className="app-logo">
-          <div className="app-logo-icon">🎂</div>
+          <div className="avatar-container">
+            <img src={wishyAvatar} alt="Wishy" className="wishy-avatar 3d-float" />
+          </div>
           <div>
-            <h1>Birthday Wish Assistant</h1>
-            <p>Automate WhatsApp birthday greetings</p>
+            <h1>Wishy</h1>
+            <p>Your 3D WhatsApp Birthday Assistant</p>
           </div>
         </div>
         <DarkModeToggle dark={dark} onToggle={() => setDark(d => !d)} />
