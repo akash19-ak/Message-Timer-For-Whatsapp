@@ -12,7 +12,7 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState(null)
 
-  const { schedules, loading, error, fetchSchedules, createSchedule, deleteSchedule, updateSchedule } = useSchedules()
+  const { schedules, loading, error, fetchSchedules, createSchedule, deleteSchedule, updateSchedule, sendNow } = useSchedules()
 
   // Apply dark mode
   useEffect(() => {
@@ -39,6 +39,22 @@ export default function App() {
       setSubmitting(false)
     }
   }, [createSchedule])
+
+  const handleSendNow = useCallback(async (id, name) => {
+    try {
+      const result = await sendNow(id)
+      setNotification({
+        type: 'success',
+        message: `📱 WhatsApp opened for ${name}! Check your browser and hit Send.`,
+      })
+      return result
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.error || 'Failed to open WhatsApp.',
+      })
+    }
+  }, [sendNow])
 
   const handleDelete = useCallback(async (id) => {
     await deleteSchedule(id)
@@ -74,12 +90,13 @@ export default function App() {
         </aside>
 
         <section>
-          <ScheduledList
+        <ScheduledList
             schedules={schedules}
             loading={loading}
             error={error}
             onDelete={handleDelete}
             onUpdate={handleUpdate}
+            onSendNow={handleSendNow}
             onRefresh={fetchSchedules}
           />
         </section>

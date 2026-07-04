@@ -102,10 +102,11 @@ function EditModal({ schedule, onSave, onClose, saving }) {
 }
 
 // ─── Schedule Item ────────────────────────────────────────────────────────────
-function ScheduleItem({ schedule, onDelete, onUpdate }) {
+function ScheduleItem({ schedule, onDelete, onUpdate, onSendNow }) {
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [sending, setSending] = useState(false)
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete wish for ${schedule.name}?`)) return
@@ -124,6 +125,12 @@ function ScheduleItem({ schedule, onDelete, onUpdate }) {
     }
   }
 
+  const handleSend = async () => {
+    setSending(true)
+    try { await onSendNow(schedule.id, schedule.name) }
+    finally { setSending(false) }
+  }
+
   return (
     <>
       <div className={`schedule-item${schedule.sent ? ' sent' : ''}`}>
@@ -138,14 +145,37 @@ function ScheduleItem({ schedule, onDelete, onUpdate }) {
             </div>
           </div>
           <div className="schedule-item-actions">
+            {!schedule.sent && (
+              <button
+                id={`send-now-btn-${schedule.id}`}
+                className="btn"
+                style={{
+                  background: 'linear-gradient(135deg, #25d366, #128c7e)',
+                  color: '#fff',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.8rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  gap: '0.35rem',
+                  boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+                  opacity: sending ? 0.7 : 1,
+                  cursor: sending ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleSend}
+                disabled={sending}
+                title="Open WhatsApp Web and send this message now"
+              >
+                {sending ? '⏳ Opening…' : '📱 Send Now'}
+              </button>
+            )}
             <a
               href={buildWaLink(schedule.phone, schedule.message)}
               target="_blank"
               rel="noopener noreferrer"
               className="wa-test-link"
-              title="Preview WhatsApp link"
+              title="Open wa.me link manually"
             >
-              <span>🟢</span> Test
+              <span>🔗</span> Link
             </a>
             {!schedule.sent && (
               <button
@@ -188,7 +218,7 @@ function ScheduleItem({ schedule, onDelete, onUpdate }) {
 }
 
 // ─── Scheduled List ───────────────────────────────────────────────────────────
-export default function ScheduledList({ schedules, loading, error, onDelete, onUpdate, onRefresh }) {
+export default function ScheduledList({ schedules, loading, error, onDelete, onUpdate, onSendNow, onRefresh }) {
   const pending = schedules.filter(s => !s.sent)
   const sent = schedules.filter(s => s.sent)
 
@@ -219,6 +249,25 @@ export default function ScheduledList({ schedules, loading, error, onDelete, onU
         <div className="stat-chip">📊 Total <span className="val">{schedules.length}</span></div>
       </div>
 
+      {/* How it works notice */}
+      <div style={{
+        background: 'rgba(37,211,102,0.08)',
+        border: '1px solid rgba(37,211,102,0.2)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '0.65rem 1rem',
+        fontSize: '0.8rem',
+        color: 'var(--text-secondary)',
+        marginBottom: '1rem',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '0.5rem',
+      }}>
+        <span>📱</span>
+        <span>
+          <strong>How it works:</strong> Click <strong>"Send Now"</strong> to open WhatsApp Web with the message pre-filled. WhatsApp Web will load and the message will be auto-sent after ~20 seconds. Make sure you are logged in to WhatsApp Web first!
+        </span>
+      </div>
+
       {error && (
         <div className="notification error" style={{ marginBottom: '1rem' }}>
           <span className="notification-icon">❌</span>
@@ -241,7 +290,7 @@ export default function ScheduledList({ schedules, loading, error, onDelete, onU
               </p>
               <div className="schedule-list" style={{ marginBottom: '1.5rem' }}>
                 {pending.map(s => (
-                  <ScheduleItem key={s.id} schedule={s} onDelete={onDelete} onUpdate={onUpdate} />
+                  <ScheduleItem key={s.id} schedule={s} onDelete={onDelete} onUpdate={onUpdate} onSendNow={onSendNow} />
                 ))}
               </div>
             </>
@@ -253,7 +302,7 @@ export default function ScheduledList({ schedules, loading, error, onDelete, onU
               </p>
               <div className="schedule-list">
                 {sent.map(s => (
-                  <ScheduleItem key={s.id} schedule={s} onDelete={onDelete} onUpdate={onUpdate} />
+                  <ScheduleItem key={s.id} schedule={s} onDelete={onDelete} onUpdate={onUpdate} onSendNow={onSendNow} />
                 ))}
               </div>
             </>

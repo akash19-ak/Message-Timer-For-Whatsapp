@@ -1,6 +1,24 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from models import db, Schedule
+
+
+def parse_and_localize(dt_str):
+    """Parse ISO datetime string and return a naive local datetime.
+
+    JS sends UTC ISO strings with Z suffix (e.g. '2026-07-04T07:50:00.000Z').
+    Python's datetime.now() returns naive local time.
+    We convert the incoming UTC time to local naive so comparisons work.
+    """
+    # Normalize: replace Z with +00:00 so Python can parse it
+    dt_str_norm = dt_str.replace('Z', '+00:00')
+    dt = datetime.fromisoformat(dt_str_norm)
+
+    if dt.tzinfo is not None:
+        # It's tz-aware (UTC from JS). Convert to local naive.
+        dt = dt.astimezone().replace(tzinfo=None)
+    # else: already naive (no timezone info) — use as-is
+    return dt
 
 api = Blueprint('api', __name__)
 
@@ -23,9 +41,9 @@ def create_schedule():
             return jsonify({'error': f'Missing required field: {field}'}), 400
 
     try:
-        scheduled_dt = datetime.fromisoformat(data['scheduled_datetime'])
-    except ValueError:
-        return jsonify({'error': 'Invalid datetime format. Use ISO 8601.'}), 400
+        scheduled_dt = parse_and_localize(data['scheduled_datetime'])
+    except (ValueError, TypeError) as e:
+        return jsonify({'error': f'Invalid datetime format. Use ISO 8601. ({e})'}), 400
 
     if scheduled_dt <= datetime.now():
         return jsonify({'error': 'Scheduled time must be in the future.'}), 400
@@ -71,13 +89,37 @@ def update_schedule(schedule_id):
         schedule.message = data['message']
     if data.get('scheduled_datetime'):
         try:
-            scheduled_dt = datetime.fromisoformat(data['scheduled_datetime'])
+            scheduled_dt = parse_and_localize(data['scheduled_datetime'])
             if scheduled_dt <= datetime.now():
                 return jsonify({'error': 'Scheduled time must be in the future.'}), 400
             schedule.scheduled_datetime = scheduled_dt
             schedule.sent = False  # Reset sent status on reschedule
-        except ValueError:
-            return jsonify({'error': 'Invalid datetime format.'}), 400
+        except (ValueError, TypeError) as e:
+            return jsonify({'error': f'Invalid datetime format. ({e})'}), 400
 
     db.session.commit()
     return jsonify(schedule.to_dict()), 200
+
+
+@api.route('/api/schedule/<int:schedule_id>/send', methods=['POST'])
+def send_now(schedule_id):
+    """Manually trigger sending a WhatsApp message for a schedule."""
+    schedule = Schedule.query.get(schedule_id)
+    if not schedule:
+        return jsonify({'error': 'Schedule not found.'}), 404
+
+    from scheduler import send_via_whatsapp_web, send_via_wa_link
+    import threading
+
+    def do_send():
+        success = send_via_whatsapp_web(schedule.phone, schedule.message)
+        if not success:
+            send_via_wa_link(schedule.phone, schedule.message)
+        schedule.sent = True
+        db.session.commit()
+
+    # Run in a background thread so we don't block the HTTP response
+    t = threading.Thread(target=do_send, daemon=True)
+    t.start()
+
+    return jsonify({'message': f'WhatsApp message triggered for {schedule.name}. Check your browser!'}), 200
