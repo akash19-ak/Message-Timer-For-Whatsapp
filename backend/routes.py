@@ -128,22 +128,25 @@ def send_now(schedule_id):
 
     from scheduler import send_message
     import threading
+    from flask import current_app
 
     # Capture before threading (avoid SQLAlchemy detached session issues)
     phone   = schedule.phone
     message = schedule.message
     name    = schedule.name
     sid     = schedule.id
+    app     = current_app._get_current_object()
 
-    def do_send():
-        send_message(phone, message, method=method)
-        # Update sent flag via raw SQL to avoid session issues in thread
-        from sqlalchemy import text
-        with db.engine.connect() as conn:
-            conn.execute(text(f"UPDATE schedules SET sent=1 WHERE id={sid}"))
-            conn.commit()
+    def do_send(app_obj):
+        with app_obj.app_context():
+            send_message(phone, message, method=method)
+            # Update sent flag via raw SQL to avoid session issues in thread
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                conn.execute(text(f"UPDATE schedules SET sent=1 WHERE id={sid}"))
+                conn.commit()
 
-    threading.Thread(target=do_send, daemon=True).start()
+    threading.Thread(target=do_send, args=(app,), daemon=True).start()
 
     method_labels = {
         'app':  'WhatsApp Desktop App',

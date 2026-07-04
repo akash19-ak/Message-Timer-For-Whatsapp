@@ -34,7 +34,7 @@ def phone_digits_only(phone: str) -> str:
 
 # ─── Method 1: WhatsApp Desktop App ─────────────────────────────────────────
 
-def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 6) -> bool:
+def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12) -> bool:
     """
     Send via the WhatsApp Desktop app (Windows).
     Uses the whatsapp:// URI scheme to open the installed WhatsApp app.
@@ -60,14 +60,14 @@ def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 6) -> bool:
         logger.info(f"[WA App] Waiting {wait_time}s for WhatsApp app to load…")
         time.sleep(wait_time)
 
-        # Click the center-bottom of screen where the send button / input is
-        screen_w, screen_h = pyautogui.size()
-        # Click in the lower-center area (chat input box area)
-        pyautogui.click(screen_w // 2, int(screen_h * 0.9))
-        time.sleep(0.5)
-
-        # Press Enter to send
+        # Do NOT click the screen, as whatsapp:// automatically focuses the input box.
+        # Clicking might accidentally remove focus.
+        
+        # Press Enter to send (sometimes needs a tiny delay or a second press to confirm)
         pyautogui.press('enter')
+        time.sleep(1)
+        pyautogui.press('enter')
+        
         logger.info(f"[WA App] ✅ Enter pressed — message sent via WhatsApp Desktop to {phone_clean}")
 
         time.sleep(1)
@@ -100,13 +100,13 @@ def send_via_whatsapp_web(phone: str, message: str, wait_time: int = 30) -> bool
         logger.info(f"[WA Web] Waiting {wait_time}s for WhatsApp Web to load…")
         time.sleep(wait_time)
 
-        # Click the center of screen to ensure the chat window has focus
-        screen_w, screen_h = pyautogui.size()
-        pyautogui.click(screen_w // 2, screen_h // 2)
-        time.sleep(1)
-
+        # Do NOT click the screen, the URL parameter &text= focuses the chat input automatically
+        
         # Press Enter to send
         pyautogui.press('enter')
+        time.sleep(1)
+        pyautogui.press('enter')
+        
         logger.info(f"[WA Web] ✅ Enter pressed — message sent via WhatsApp Web to {phone_clean}")
 
         time.sleep(2)
