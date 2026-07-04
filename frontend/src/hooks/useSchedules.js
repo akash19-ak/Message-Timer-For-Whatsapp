@@ -40,8 +40,8 @@ export function useSchedules() {
     return data
   }, [])
 
-  const sendNow = useCallback(async (id) => {
-    const { data } = await axios.post(`${BASE}/schedule/${id}/send`)
+  const sendNow = useCallback(async (id, method = 'app') => {
+    const { data } = await axios.post(`${BASE}/schedule/${id}/send`, { method })
     // Refresh list after 3s to reflect sent=true
     setTimeout(fetchSchedules, 3000)
     return data

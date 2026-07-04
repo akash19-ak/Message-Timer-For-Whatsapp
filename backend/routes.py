@@ -1,27 +1,32 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from models import db, Schedule
-
-
-def parse_and_localize(dt_str):
-    """Parse ISO datetime string and return a naive local datetime.
-
-    JS sends UTC ISO strings with Z suffix (e.g. '2026-07-04T07:50:00.000Z').
-    Python's datetime.now() returns naive local time.
-    We convert the incoming UTC time to local naive so comparisons work.
-    """
-    # Normalize: replace Z with +00:00 so Python can parse it
-    dt_str_norm = dt_str.replace('Z', '+00:00')
-    dt = datetime.fromisoformat(dt_str_norm)
-
-    if dt.tzinfo is not None:
-        # It's tz-aware (UTC from JS). Convert to local naive.
-        dt = dt.astimezone().replace(tzinfo=None)
-    # else: already naive (no timezone info) — use as-is
-    return dt
 
 api = Blueprint('api', __name__)
 
+
+# ─── Datetime helper ─────────────────────────────────────────────────────────
+
+def parse_and_localize(dt_str: str) -> datetime:
+    """
+    Parse any ISO datetime string (with or without Z/offset) and return
+    a naive datetime in the machine's local timezone for DB storage.
+
+    JS sends UTC with Z suffix: '2026-07-04T07:50:00.000Z'
+    Python datetime.now() is naive local time.
+    We normalize to naive local so comparisons work correctly.
+    """
+    dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+    if dt.tzinfo is not None:
+        # tz-aware → convert to local timezone → strip tzinfo
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
+VALID_METHODS = {'app', 'web', 'link'}
+
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
 
 @api.route('/api/schedules', methods=['GET'])
 def get_schedules():
@@ -35,8 +40,7 @@ def create_schedule():
     """Create a new scheduled birthday wish."""
     data = request.get_json()
 
-    required = ['name', 'phone', 'message', 'scheduled_datetime']
-    for field in required:
+    for field in ['name', 'phone', 'message', 'scheduled_datetime']:
         if not data.get(field):
             return jsonify({'error': f'Missing required field: {field}'}), 400
 
@@ -48,15 +52,19 @@ def create_schedule():
     if scheduled_dt <= datetime.now():
         return jsonify({'error': 'Scheduled time must be in the future.'}), 400
 
+    method = data.get('send_method', 'app')
+    if method not in VALID_METHODS:
+        method = 'app'
+
     schedule = Schedule(
         name=data['name'],
         phone=data['phone'],
         message=data['message'],
-        scheduled_datetime=scheduled_dt
+        scheduled_datetime=scheduled_dt,
+        send_method=method,
     )
     db.session.add(schedule)
     db.session.commit()
-
     return jsonify(schedule.to_dict()), 201
 
 
@@ -66,10 +74,9 @@ def delete_schedule(schedule_id):
     schedule = Schedule.query.get(schedule_id)
     if not schedule:
         return jsonify({'error': 'Schedule not found.'}), 404
-
     db.session.delete(schedule)
     db.session.commit()
-    return jsonify({'message': f'Schedule {schedule_id} deleted successfully.'}), 200
+    return jsonify({'message': f'Schedule {schedule_id} deleted.'}), 200
 
 
 @api.route('/api/schedule/<int:schedule_id>', methods=['PUT'])
@@ -87,13 +94,15 @@ def update_schedule(schedule_id):
         schedule.phone = data['phone']
     if data.get('message'):
         schedule.message = data['message']
+    if data.get('send_method') in VALID_METHODS:
+        schedule.send_method = data['send_method']
     if data.get('scheduled_datetime'):
         try:
             scheduled_dt = parse_and_localize(data['scheduled_datetime'])
             if scheduled_dt <= datetime.now():
                 return jsonify({'error': 'Scheduled time must be in the future.'}), 400
             schedule.scheduled_datetime = scheduled_dt
-            schedule.sent = False  # Reset sent status on reschedule
+            schedule.sent = False
         except (ValueError, TypeError) as e:
             return jsonify({'error': f'Invalid datetime format. ({e})'}), 400
 
@@ -103,34 +112,44 @@ def update_schedule(schedule_id):
 
 @api.route('/api/schedule/<int:schedule_id>/send', methods=['POST'])
 def send_now(schedule_id):
-    """Manually trigger sending a WhatsApp message for a schedule."""
+    """
+    Manually trigger sending a WhatsApp message for a schedule entry.
+    Accepts optional JSON body: { "method": "app" | "web" | "link" }
+    Defaults to the schedule's stored send_method.
+    """
     schedule = Schedule.query.get(schedule_id)
     if not schedule:
         return jsonify({'error': 'Schedule not found.'}), 404
 
-    from scheduler import send_via_pywhatkit, send_via_wa_link
+    data = request.get_json(silent=True) or {}
+    method = data.get('method', schedule.send_method or 'app')
+    if method not in VALID_METHODS:
+        method = 'app'
+
+    from scheduler import send_message
     import threading
 
-    # Capture values before thread starts (avoid SQLAlchemy session issues in thread)
-    phone = schedule.phone
+    # Capture before threading (avoid SQLAlchemy detached session issues)
+    phone   = schedule.phone
     message = schedule.message
-    name = schedule.name
-    sid = schedule.id
+    name    = schedule.name
+    sid     = schedule.id
 
     def do_send():
-        success = send_via_pywhatkit(phone, message, wait_time=25)
-        if not success:
-            send_via_wa_link(phone, message)
-        # Re-query inside thread to avoid detached session
+        send_message(phone, message, method=method)
+        # Update sent flag via raw SQL to avoid session issues in thread
+        from sqlalchemy import text
         with db.engine.connect() as conn:
-            from sqlalchemy import text
             conn.execute(text(f"UPDATE schedules SET sent=1 WHERE id={sid}"))
             conn.commit()
 
-    t = threading.Thread(target=do_send, daemon=True)
-    t.start()
+    threading.Thread(target=do_send, daemon=True).start()
 
+    method_labels = {
+        'app':  'WhatsApp Desktop App',
+        'web':  'WhatsApp Web (browser)',
+        'link': 'wa.me link',
+    }
     return jsonify({
-        'message': f'📱 Opening WhatsApp Web for {name}. Please wait ~25 seconds — message will be sent automatically!'
+        'message': f'Sending to {name} via {method_labels[method]}. Check your screen!'
     }), 200
-

@@ -125,9 +125,15 @@ function ScheduleItem({ schedule, onDelete, onUpdate, onSendNow }) {
     }
   }
 
-  const handleSend = async () => {
+  const handleSendApp = async () => {
     setSending(true)
-    try { await onSendNow(schedule.id, schedule.name) }
+    try { await onSendNow(schedule.id, schedule.name, 'app') }
+    finally { setSending(false) }
+  }
+
+  const handleSendWeb = async () => {
+    setSending(true)
+    try { await onSendNow(schedule.id, schedule.name, 'web') }
     finally { setSending(false) }
   }
 
@@ -146,27 +152,50 @@ function ScheduleItem({ schedule, onDelete, onUpdate, onSendNow }) {
           </div>
           <div className="schedule-item-actions">
             {!schedule.sent && (
-              <button
-                id={`send-now-btn-${schedule.id}`}
-                className="btn"
-                style={{
-                  background: 'linear-gradient(135deg, #25d366, #128c7e)',
-                  color: '#fff',
-                  padding: '0.4rem 0.85rem',
-                  fontSize: '0.8rem',
-                  borderRadius: 'var(--radius-sm)',
-                  border: 'none',
-                  gap: '0.35rem',
-                  boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
-                  opacity: sending ? 0.7 : 1,
-                  cursor: sending ? 'not-allowed' : 'pointer',
-                }}
-                onClick={handleSend}
-                disabled={sending}
-                title="Open WhatsApp Web and send this message now"
-              >
-                {sending ? '⏳ Opening…' : '📱 Send Now'}
-              </button>
+              <>
+                <button
+                  id={`send-now-btn-app-${schedule.id}`}
+                  className="btn"
+                  style={{
+                    background: 'linear-gradient(135deg, #25d366, #128c7e)',
+                    color: '#fff',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.8rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    gap: '0.35rem',
+                    boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+                    opacity: sending ? 0.7 : 1,
+                    cursor: sending ? 'not-allowed' : 'pointer',
+                  }}
+                  onClick={handleSendApp}
+                  disabled={sending}
+                  title="Open WhatsApp Desktop App and send this message now"
+                >
+                  {sending ? '⏳…' : '📱 App'}
+                </button>
+                <button
+                  id={`send-now-btn-web-${schedule.id}`}
+                  className="btn"
+                  style={{
+                    background: 'linear-gradient(135deg, #25d366, #128c7e)',
+                    color: '#fff',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.8rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    gap: '0.35rem',
+                    boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+                    opacity: sending ? 0.7 : 1,
+                    cursor: sending ? 'not-allowed' : 'pointer',
+                  }}
+                  onClick={handleSendWeb}
+                  disabled={sending}
+                  title="Open WhatsApp Web and send this message now"
+                >
+                  {sending ? '⏳…' : '🌐 Web'}
+                </button>
+              </>
             )}
             <a
               href={buildWaLink(schedule.phone, schedule.message)}
@@ -264,7 +293,7 @@ export default function ScheduledList({ schedules, loading, error, onDelete, onU
       }}>
         <span>📱</span>
         <span>
-          <strong>How it works:</strong> Click <strong>"Send Now"</strong> to open WhatsApp Web with the message pre-filled. WhatsApp Web will load and the message will be auto-sent after ~20 seconds. Make sure you are logged in to WhatsApp Web first!
+          <strong>How it works:</strong> Click <strong>"📱 App"</strong> to send using the WhatsApp Desktop app, or <strong>"🌐 Web"</strong> for WhatsApp Web. The message will be pre-filled and sent automatically. Make sure you are logged in!
         </span>
       </div>
 

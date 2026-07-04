@@ -40,12 +40,13 @@ export default function App() {
     }
   }, [createSchedule])
 
-  const handleSendNow = useCallback(async (id, name) => {
+  const handleSendNow = useCallback(async (id, name, method) => {
     try {
-      const result = await sendNow(id)
+      const result = await sendNow(id, method)
+      const methodLabel = method === 'app' ? 'WhatsApp Desktop App' : 'WhatsApp Web'
       setNotification({
         type: 'success',
-        message: `📱 WhatsApp Web is opening for ${name}! Message will auto-send in ~25 seconds. Make sure you are logged in to WhatsApp Web!`,
+        message: `📱 ${methodLabel} is opening for ${name}! Please wait while the message is sent.`,
       })
       return result
     } catch (err) {
