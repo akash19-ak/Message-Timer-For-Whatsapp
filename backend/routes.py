@@ -108,18 +108,29 @@ def send_now(schedule_id):
     if not schedule:
         return jsonify({'error': 'Schedule not found.'}), 404
 
-    from scheduler import send_via_whatsapp_web, send_via_wa_link
+    from scheduler import send_via_pywhatkit, send_via_wa_link
     import threading
 
-    def do_send():
-        success = send_via_whatsapp_web(schedule.phone, schedule.message)
-        if not success:
-            send_via_wa_link(schedule.phone, schedule.message)
-        schedule.sent = True
-        db.session.commit()
+    # Capture values before thread starts (avoid SQLAlchemy session issues in thread)
+    phone = schedule.phone
+    message = schedule.message
+    name = schedule.name
+    sid = schedule.id
 
-    # Run in a background thread so we don't block the HTTP response
+    def do_send():
+        success = send_via_pywhatkit(phone, message, wait_time=25)
+        if not success:
+            send_via_wa_link(phone, message)
+        # Re-query inside thread to avoid detached session
+        with db.engine.connect() as conn:
+            from sqlalchemy import text
+            conn.execute(text(f"UPDATE schedules SET sent=1 WHERE id={sid}"))
+            conn.commit()
+
     t = threading.Thread(target=do_send, daemon=True)
     t.start()
 
-    return jsonify({'message': f'WhatsApp message triggered for {schedule.name}. Check your browser!'}), 200
+    return jsonify({
+        'message': f'📱 Opening WhatsApp Web for {name}. Please wait ~25 seconds — message will be sent automatically!'
+    }), 200
+

@@ -2,8 +2,8 @@ import time
 import logging
 import webbrowser
 import urllib.parse
-import pyperclip
 import pyautogui
+import pyperclip
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -14,59 +14,80 @@ scheduler = BackgroundScheduler(timezone='Asia/Kolkata')
 
 # ─── WhatsApp Sender ─────────────────────────────────────────────────────────
 
-def send_via_whatsapp_web(phone: str, message: str) -> bool:
+def sanitize_phone(phone: str) -> str:
     """
-    Opens WhatsApp Web with the pre-filled message and auto-sends it.
-
-    Strategy:
-      1. Build the wa.me link (pre-fills the message in WhatsApp Web chat)
-      2. Open it in the default browser
-      3. Wait for WhatsApp Web to load
-      4. Press Enter to send the message
-      5. Wait briefly, then close the tab
-
-    Returns True on success, False on failure.
+    Return a clean phone number string with leading +.
+    pywhatkit requires the number to start with + and country code.
+    e.g.  '919876543210'  →  '+919876543210'
+          '+919876543210' →  '+919876543210'
     """
+    cleaned = phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    if not cleaned.startswith('+'):
+        cleaned = '+' + cleaned
+    return cleaned
+
+
+def send_via_pywhatkit(phone: str, message: str, wait_time: int = 25) -> bool:
+    """
+    Send a WhatsApp message using pywhatkit (WhatsApp Web automation).
+
+    Steps pywhatkit takes internally:
+      1. Opens https://web.whatsapp.com/send?phone=<phone>&text=<message>
+      2. Clicks the center of screen to focus the chat window
+      3. Waits `wait_time` seconds for WhatsApp Web to load the chat
+      4. Presses Enter to send the message
+
+    Requirements:
+      - User must be logged in to WhatsApp Web (wa.me QR already scanned)
+      - A browser must be set as default (Chrome / Edge)
+    """
+    import pywhatkit as kit
+
+    phone_clean = sanitize_phone(phone)
+    logger.info(f"[WhatsApp] Sending to {phone_clean} via pywhatkit (wait={wait_time}s)…")
+
     try:
-        # Sanitise phone number
-        phone_clean = phone.replace('+', '').replace(' ', '').replace('-', '')
-
-        # URL-encode the message for the wa.me link
-        encoded_message = urllib.parse.quote(message)
-        wa_link = f"https://web.whatsapp.com/send?phone={phone_clean}&text={encoded_message}"
-
-        logger.info(f"[WhatsApp] Opening: {wa_link}")
-        webbrowser.open(wa_link)
-
-        # Give WhatsApp Web time to open and load the chat
-        logger.info("[WhatsApp] Waiting 20s for WhatsApp Web to load…")
-        time.sleep(20)
-
-        # Press Enter to send the pre-filled message
-        pyautogui.press('enter')
-        logger.info("[WhatsApp] Pressed Enter — message sent!")
-
-        # Wait 3 seconds, then close the tab with Ctrl+W
-        time.sleep(3)
-        pyautogui.hotkey('ctrl', 'w')
-        logger.info("[WhatsApp] Closed the tab.")
-
+        kit.sendwhatmsg_instantly(
+            phone_no=phone_clean,
+            message=message,
+            wait_time=wait_time,   # seconds to wait for WhatsApp Web to load
+            tab_close=True,        # close tab after sending
+            close_time=3,          # seconds before closing
+        )
+        logger.info(f"[WhatsApp] ✅ Message sent to {phone_clean}")
         return True
 
     except Exception as e:
-        logger.error(f"[WhatsApp] Failed to send via WhatsApp Web: {e}")
+        logger.error(f"[WhatsApp] pywhatkit error for {phone_clean}: {e}")
         return False
 
 
 def send_via_wa_link(phone: str, message: str) -> bool:
-    """Fallback: just open the wa.me link without auto-sending."""
+    """
+    Fallback: open the wa.me link so user can send manually.
+    Also uses pyautogui to press Enter after waiting.
+    """
     try:
         phone_clean = phone.replace('+', '').replace(' ', '').replace('-', '')
         encoded = urllib.parse.quote(message)
-        link = f"https://wa.me/{phone_clean}?text={encoded}"
+        link = f"https://web.whatsapp.com/send?phone={phone_clean}&text={encoded}"
+
+        logger.info(f"[WhatsApp Fallback] Opening: {link}")
         webbrowser.open(link)
-        logger.info(f"[WhatsApp Fallback] Opened wa.me link for {phone}")
+
+        # Wait for page to load then try pressing Enter
+        time.sleep(25)
+        # Click middle of screen to ensure WhatsApp chat has focus
+        screen_width, screen_height = pyautogui.size()
+        pyautogui.click(screen_width // 2, screen_height // 2)
+        time.sleep(2)
+        pyautogui.press('enter')
+        logger.info(f"[WhatsApp Fallback] Pressed Enter for {phone_clean}")
+
+        time.sleep(3)
+        pyautogui.hotkey('ctrl', 'w')
         return True
+
     except Exception as e:
         logger.error(f"[WhatsApp Fallback] Error: {e}")
         return False
@@ -75,7 +96,7 @@ def send_via_wa_link(phone: str, message: str) -> bool:
 # ─── Scheduler Job ───────────────────────────────────────────────────────────
 
 def check_and_send_wishes(app):
-    """Background job that runs every minute to check for due schedules."""
+    """Background job that runs every 30 seconds to check for due schedules."""
     with app.app_context():
         from models import db, Schedule
 
@@ -88,15 +109,15 @@ def check_and_send_wishes(app):
         if not due:
             return
 
-        logger.info(f"[Scheduler] Found {len(due)} due schedule(s) at {now.strftime('%H:%M:%S')}")
+        logger.info(f"[Scheduler] {len(due)} due schedule(s) found at {now.strftime('%H:%M:%S')}")
 
         for schedule in due:
             logger.info(f"[Scheduler] Processing: {schedule.name} → {schedule.phone}")
 
-            success = send_via_whatsapp_web(schedule.phone, schedule.message)
+            success = send_via_pywhatkit(schedule.phone, schedule.message, wait_time=25)
 
             if not success:
-                logger.warning(f"[Scheduler] Primary method failed, using fallback for {schedule.name}")
+                logger.warning(f"[Scheduler] pywhatkit failed, trying fallback for {schedule.name}")
                 send_via_wa_link(schedule.phone, schedule.message)
 
             schedule.sent = True
@@ -110,7 +131,7 @@ def start_scheduler(app):
         func=check_and_send_wishes,
         args=[app],
         trigger='interval',
-        seconds=30,   # Check every 30 seconds for faster response
+        seconds=30,
         id='wish_checker',
         replace_existing=True
     )

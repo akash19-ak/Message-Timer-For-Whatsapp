@@ -45,13 +45,13 @@ export default function App() {
       const result = await sendNow(id)
       setNotification({
         type: 'success',
-        message: `📱 WhatsApp opened for ${name}! Check your browser and hit Send.`,
+        message: `📱 WhatsApp Web is opening for ${name}! Message will auto-send in ~25 seconds. Make sure you are logged in to WhatsApp Web!`,
       })
       return result
     } catch (err) {
       setNotification({
         type: 'error',
-        message: err.response?.data?.error || 'Failed to open WhatsApp.',
+        message: err.response?.data?.error || 'Failed to open WhatsApp. Make sure the backend is running.',
       })
     }
   }, [sendNow])
