@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 
 function formatDateTime(iso) {
   const d = new Date(iso)
@@ -38,11 +38,42 @@ function EditModal({ schedule, onSave, onClose, saving }) {
     scheduled_datetime: toLocalInputValue(schedule.scheduled_datetime),
   })
   const [err, setErr] = useState({})
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(
+    schedule.image_filename ? `http://localhost:5000/uploads/${schedule.image_filename}` : null
+  )
+  const [removeImage, setRemoveImage] = useState(false)
+  const fileInputRef = useRef(null)
 
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
     if (err[name]) setErr(prev => ({ ...prev, [name]: null }))
+  }
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg']
+    if (!allowed.includes(file.type)) {
+      setErr(prev => ({ ...prev, image: 'Only JPG, PNG, or GIF images are allowed.' }))
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErr(prev => ({ ...prev, image: 'Image must be smaller than 10MB.' }))
+      return
+    }
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setRemoveImage(false)
+    setErr(prev => ({ ...prev, image: null }))
+  }
+
+  const handleClearImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setRemoveImage(true)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSave = async (e) => {
@@ -54,7 +85,10 @@ function EditModal({ schedule, onSave, onClose, saving }) {
     else if (new Date(form.scheduled_datetime) <= new Date()) errors.scheduled_datetime = 'Must be in the future.'
     if (!form.message.trim()) errors.message = 'Message is required.'
     if (Object.keys(errors).length) { setErr(errors); return }
-    await onSave({ ...form, scheduled_datetime: new Date(form.scheduled_datetime).toISOString() })
+    const payload = { ...form, scheduled_datetime: new Date(form.scheduled_datetime).toISOString() }
+    if (imageFile) payload.image = imageFile
+    if (removeImage) payload.remove_image = 'true'
+    await onSave(payload)
   }
 
   return (
@@ -89,6 +123,29 @@ function EditModal({ schedule, onSave, onClose, saving }) {
               value={form.message} onChange={handleChange} rows={4} />
             {err.message && <p className="form-error">⚠ {err.message}</p>}
           </div>
+
+          {/* Image upload */}
+          <div className="form-group">
+            <label className="form-label">🖼️ Image <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+            {imagePreview ? (
+              <div className="image-preview-wrapper" style={{ maxHeight: '120px' }}>
+                <img src={imagePreview} alt="Preview" className="image-preview" />
+                <div className="image-preview-overlay">
+                  <button type="button" className="image-preview-remove" onClick={handleClearImage}>✕ Remove</button>
+                </div>
+              </div>
+            ) : (
+              <label htmlFor="edit-image-upload" className="image-drop-zone" style={{ padding: '0.75rem' }}>
+                <span className="image-drop-icon">📎</span>
+                <span className="image-drop-text">Click to attach an image</span>
+                <input id="edit-image-upload" ref={fileInputRef} type="file"
+                  accept="image/jpeg,image/png,image/gif" onChange={handleImageChange}
+                  style={{ display: 'none' }} />
+              </label>
+            )}
+            {err.image && <p className="form-error">⚠ {err.image}</p>}
+          </div>
+
           <div className="modal-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
             <button id="save-edit-btn" type="submit" className="btn btn-primary" disabled={saving}>
@@ -227,7 +284,18 @@ function ScheduleItem({ schedule, onDelete, onUpdate, onSendNow }) {
         <div className="schedule-meta">
           <span className="meta-chip">📅 {formatDateTime(schedule.scheduled_datetime)}</span>
           <span className="meta-chip phone">📱 {schedule.phone}</span>
+          {schedule.image_filename && <span className="meta-chip" style={{ color: 'var(--accent-primary)' }}>🖼️ Image</span>}
         </div>
+
+        {schedule.image_filename && (
+          <div className="schedule-thumb-wrapper">
+            <img
+              src={`http://localhost:5000/uploads/${schedule.image_filename}`}
+              alt="Attached"
+              className="schedule-thumb"
+            />
+          </div>
+        )}
 
         <div className="schedule-message">
           {schedule.message}

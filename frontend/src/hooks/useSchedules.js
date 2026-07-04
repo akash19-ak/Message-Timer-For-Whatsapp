@@ -22,7 +22,20 @@ export function useSchedules() {
   }, [])
 
   const createSchedule = useCallback(async (payload) => {
-    const { data } = await axios.post(`${BASE}/schedule`, payload)
+    // If payload contains an image file, use FormData; otherwise use JSON
+    let body
+    let headers = {}
+    if (payload.image instanceof File) {
+      body = new FormData()
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v)
+      })
+      // Let browser set multipart boundary automatically
+    } else {
+      body = JSON.stringify(payload)
+      headers['Content-Type'] = 'application/json'
+    }
+    const { data } = await axios.post(`${BASE}/schedule`, body, { headers })
     setSchedules(prev => [...prev, data].sort(
       (a, b) => new Date(a.scheduled_datetime) - new Date(b.scheduled_datetime)
     ))
@@ -35,7 +48,18 @@ export function useSchedules() {
   }, [])
 
   const updateSchedule = useCallback(async (id, payload) => {
-    const { data } = await axios.put(`${BASE}/schedule/${id}`, payload)
+    let body
+    let headers = {}
+    if (payload.image instanceof File || payload.remove_image) {
+      body = new FormData()
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) body.append(k, v instanceof File ? v : String(v))
+      })
+    } else {
+      body = JSON.stringify(payload)
+      headers['Content-Type'] = 'application/json'
+    }
+    const { data } = await axios.put(`${BASE}/schedule/${id}`, body, { headers })
     setSchedules(prev => prev.map(s => s.id === id ? data : s))
     return data
   }, [])

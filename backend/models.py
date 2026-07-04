@@ -13,6 +13,7 @@ class Schedule(db.Model):
     scheduled_datetime = db.Column(db.DateTime, nullable=False)
     send_method = db.Column(db.String(10), default='app', nullable=False)  # 'app' | 'web' | 'link'
     sent = db.Column(db.Boolean, default=False)
+    image_filename = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -24,5 +25,6 @@ class Schedule(db.Model):
             'scheduled_datetime': self.scheduled_datetime.isoformat(),
             'send_method': self.send_method,
             'sent': self.sent,
+            'image_filename': self.image_filename,
             'created_at': self.created_at.isoformat()
         }

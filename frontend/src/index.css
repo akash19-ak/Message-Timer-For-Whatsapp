@@ -312,6 +312,126 @@ body::after {
 }
 
 /* ===========================
+   Image Attachment
+   =========================== */
+.image-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 1.5rem;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  background: var(--bg-secondary);
+  text-align: center;
+}
+
+.image-drop-zone:hover {
+  border-color: var(--accent-primary);
+  background: rgba(37, 211, 102, 0.06);
+}
+
+.image-drop-icon {
+  font-size: 1.8rem;
+}
+
+.image-drop-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.image-drop-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.image-preview-wrapper {
+  position: relative;
+  width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(37, 211, 102, 0.3);
+  box-shadow: 0 4px 16px rgba(18, 140, 126, 0.12);
+}
+
+.image-preview {
+  width: 100%;
+  max-height: 200px;
+  object-fit: cover;
+  display: block;
+  border-radius: var(--radius-md);
+}
+
+.image-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 60%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.image-preview-wrapper:hover .image-preview-overlay {
+  opacity: 1;
+}
+
+.image-preview-remove {
+  background: rgba(220, 53, 69, 0.85);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.image-preview-remove:hover {
+  background: #dc3545;
+}
+
+.image-preview-name {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.85);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Thumbnail in schedule list item */
+.schedule-thumb-wrapper {
+  margin: 0.6rem 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  max-height: 140px;
+  border: 1px solid rgba(37, 211, 102, 0.2);
+  box-shadow: 0 4px 12px rgba(18, 140, 126, 0.1);
+  transition: transform var(--transition);
+}
+
+.schedule-thumb-wrapper:hover {
+  transform: scale(1.01);
+}
+
+.schedule-thumb {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  display: block;
+}
+
+/* ===========================
    Buttons
    =========================== */
 .btn {

@@ -17,14 +17,23 @@ def create_app():
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'birthday.db')}"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    CORS(app, resources={r"/api/*": {"origins": "*"}, r"/uploads/*": {"origins": "*"}})
 
     db.init_app(app)
 
     with app.app_context():
         db.create_all()
         logging.info("Database tables created / verified.")
+
+    @app.route('/uploads/<filename>')
+    def serve_upload(filename):
+        from flask import send_from_directory
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     app.register_blueprint(api)
 

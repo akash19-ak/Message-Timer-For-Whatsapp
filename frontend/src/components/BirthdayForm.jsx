@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import TemplateSelector from './TemplateSelector'
 
 const PHONE_REGEX = /^\+?[1-9]\d{6,14}$/
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg']
+const MAX_SIZE_MB = 10
 
 function getMinDateTime() {
-  // Returns now + 1 minute in local ISO format (for datetime-local input min)
   const d = new Date(Date.now() + 60000)
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -21,6 +22,9 @@ export default function BirthdayForm({ onSubmit, loading }) {
   const [form, setForm] = useState(INITIAL_STATE)
   const [errors, setErrors] = useState({})
   const [activeTemplate, setActiveTemplate] = useState(null)
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const fileInputRef = useRef(null)
 
   const validate = () => {
     const e = {}
@@ -51,6 +55,28 @@ export default function BirthdayForm({ onSubmit, loading }) {
     if (errors.message) setErrors(prev => ({ ...prev, message: null }))
   }
 
+  const handleImageChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setErrors(prev => ({ ...prev, image: 'Only JPG, PNG, or GIF images are allowed.' }))
+      return
+    }
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      setErrors(prev => ({ ...prev, image: `Image must be smaller than ${MAX_SIZE_MB}MB.` }))
+      return
+    }
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setErrors(prev => ({ ...prev, image: null }))
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const validationErrors = validate()
@@ -59,14 +85,16 @@ export default function BirthdayForm({ onSubmit, loading }) {
       return
     }
 
-    // Convert local datetime to ISO string for backend
     const isoDatetime = new Date(form.scheduled_datetime).toISOString()
 
     try {
-      await onSubmit({ ...form, scheduled_datetime: isoDatetime })
+      const payload = { ...form, scheduled_datetime: isoDatetime }
+      if (imageFile) payload.image = imageFile
+      await onSubmit(payload)
       setForm(INITIAL_STATE)
       setErrors({})
       setActiveTemplate(null)
+      handleRemoveImage()
     } catch (err) {
       setErrors({ submit: err.response?.data?.error || 'Failed to schedule. Please try again.' })
     }
@@ -155,6 +183,41 @@ export default function BirthdayForm({ onSubmit, loading }) {
               {form.message.length} chars
             </span>
           </div>
+        </div>
+
+        {/* Image Attachment */}
+        <div className="form-group">
+          <label className="form-label">🖼️ Attach Image <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+
+          {imagePreview ? (
+            <div className="image-preview-wrapper">
+              <img src={imagePreview} alt="Preview" className="image-preview" />
+              <div className="image-preview-overlay">
+                <button
+                  type="button"
+                  className="image-preview-remove"
+                  onClick={handleRemoveImage}
+                  title="Remove image"
+                >✕ Remove</button>
+                <span className="image-preview-name">{imageFile?.name}</span>
+              </div>
+            </div>
+          ) : (
+            <label htmlFor="image-upload" className="image-drop-zone">
+              <span className="image-drop-icon">📎</span>
+              <span className="image-drop-text">Click to attach an image</span>
+              <span className="image-drop-sub">JPG, PNG, GIF · max {MAX_SIZE_MB}MB</span>
+              <input
+                id="image-upload"
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif"
+                onChange={handleImageChange}
+                style={{ display: 'none' }}
+              />
+            </label>
+          )}
+          {errors.image && <p className="form-error">⚠ {errors.image}</p>}
         </div>
 
         {errors.submit && (

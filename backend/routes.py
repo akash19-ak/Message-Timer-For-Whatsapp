@@ -1,5 +1,8 @@
-from flask import Blueprint, request, jsonify
+import os
+import uuid
+from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, timezone
+from werkzeug.utils import secure_filename
 from models import db, Schedule
 
 api = Blueprint('api', __name__)
@@ -38,7 +41,10 @@ def get_schedules():
 @api.route('/api/schedule', methods=['POST'])
 def create_schedule():
     """Create a new scheduled birthday wish."""
-    data = request.get_json()
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form
 
     for field in ['name', 'phone', 'message', 'scheduled_datetime']:
         if not data.get(field):
@@ -56,12 +62,26 @@ def create_schedule():
     if method not in VALID_METHODS:
         method = 'app'
 
+    image_file = request.files.get('image')
+    image_filename = None
+    if image_file and image_file.filename != '':
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        if ext not in ['.jpg', '.jpeg', '.png', '.gif']:
+            return jsonify({'error': 'Invalid image format. Only JPG, JPEG, PNG, GIF are allowed.'}), 400
+        
+        filename = secure_filename(image_file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+        image_file.save(upload_path)
+        image_filename = unique_filename
+
     schedule = Schedule(
         name=data['name'],
         phone=data['phone'],
         message=data['message'],
         scheduled_datetime=scheduled_dt,
         send_method=method,
+        image_filename=image_filename,
     )
     db.session.add(schedule)
     db.session.commit()
@@ -74,6 +94,16 @@ def delete_schedule(schedule_id):
     schedule = Schedule.query.get(schedule_id)
     if not schedule:
         return jsonify({'error': 'Schedule not found.'}), 404
+    
+    # Delete file from disk
+    if schedule.image_filename:
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], schedule.image_filename)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to remove file {file_path} on delete: {e}")
+
     db.session.delete(schedule)
     db.session.commit()
     return jsonify({'message': f'Schedule {schedule_id} deleted.'}), 200
@@ -86,7 +116,10 @@ def update_schedule(schedule_id):
     if not schedule:
         return jsonify({'error': 'Schedule not found.'}), 404
 
-    data = request.get_json()
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form
 
     if data.get('name'):
         schedule.name = data['name']
@@ -105,6 +138,39 @@ def update_schedule(schedule_id):
             schedule.sent = False
         except (ValueError, TypeError) as e:
             return jsonify({'error': f'Invalid datetime format. ({e})'}), 400
+
+    image_file = request.files.get('image')
+    if image_file and image_file.filename != '':
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        if ext not in ['.jpg', '.jpeg', '.png', '.gif']:
+            return jsonify({'error': 'Invalid image format. Only JPG, JPEG, PNG, GIF are allowed.'}), 400
+        
+        # Delete old file
+        if schedule.image_filename:
+            old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], schedule.image_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to remove old file {old_path}: {e}")
+
+        filename = secure_filename(image_file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        upload_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_filename)
+        image_file.save(upload_path)
+        schedule.image_filename = unique_filename
+        schedule.sent = False
+    elif data.get('remove_image') == 'true' or data.get('remove_image') is True:
+        # Delete old file
+        if schedule.image_filename:
+            old_path = os.path.join(current_app.config['UPLOAD_FOLDER'], schedule.image_filename)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to remove old file {old_path}: {e}")
+        schedule.image_filename = None
+        schedule.sent = False
 
     db.session.commit()
     return jsonify(schedule.to_dict()), 200
@@ -131,15 +197,16 @@ def send_now(schedule_id):
     from flask import current_app
 
     # Capture before threading (avoid SQLAlchemy detached session issues)
-    phone   = schedule.phone
-    message = schedule.message
-    name    = schedule.name
-    sid     = schedule.id
-    app     = current_app._get_current_object()
+    phone          = schedule.phone
+    message        = schedule.message
+    name           = schedule.name
+    image_filename = schedule.image_filename
+    sid            = schedule.id
+    app            = current_app._get_current_object()
 
     def do_send(app_obj):
         with app_obj.app_context():
-            send_message(phone, message, method=method)
+            send_message(phone, message, method=method, image_filename=image_filename)
             # Update sent flag via raw SQL to avoid session issues in thread
             from sqlalchemy import text
             with db.engine.connect() as conn:
