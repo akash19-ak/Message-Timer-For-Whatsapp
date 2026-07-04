@@ -16,7 +16,7 @@ scheduler = BackgroundScheduler(timezone='Asia/Kolkata')
 
 # Disable pyautogui fail-safe (moving mouse to corner won't abort)
 pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.05
+pyautogui.PAUSE = 0.02  # Reduced from 0.05 — faster pyautogui ops
 
 
 # ─── Phone Sanitization ───────────────────────────────────────────────────────
@@ -41,34 +41,64 @@ def copy_image_to_clipboard(image_filename: str) -> bool:
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(base_dir, 'uploads', image_filename)
-        
+
         if not os.path.exists(file_path):
             logger.error(f"[Clipboard] File not found: {file_path}")
             return False
-            
+
         abs_path = os.path.normpath(file_path)
         logger.info(f"[Clipboard] Copying image to clipboard: {abs_path}")
-        
-        # Invoke powershell Set-Clipboard command
-        cmd = ["powershell", "-Command", f"Set-Clipboard -Path '{abs_path}'"]
-        subprocess.run(cmd, check=True)
+
+        # -NoProfile / -NonInteractive speeds up PowerShell startup
+        cmd = [
+            "powershell", "-NoProfile", "-NonInteractive",
+            "-Command", f"Set-Clipboard -Path '{abs_path}'"
+        ]
+        subprocess.run(cmd, check=True, timeout=5)
         return True
     except Exception as e:
         logger.error(f"[Clipboard] Failed to copy image to clipboard: {e}")
         return False
 
 
-# ─── Method 1: WhatsApp Desktop App ─────────────────────────────────────────
+# ─── Window Activator (shared) ───────────────────────────────────────────────
 
-def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12, image_filename: str = None) -> bool:
+def _activate_window(title_keyword: str, timeout: float = 4.0) -> bool:
     """
-    Send via the WhatsApp Desktop app (Windows).
+    Poll for a window containing title_keyword and activate it.
+    Returns True if found within timeout seconds.
+    Much faster than a single fixed sleep — exits as soon as window appears.
     """
     try:
         import pygetwindow as gw
-        
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            wins = [w for w in gw.getAllWindows() if title_keyword.lower() in w.title.lower()]
+            if wins:
+                win = wins[0]
+                try:
+                    win.maximize()
+                    win.activate()
+                except Exception:
+                    pass
+                time.sleep(0.2)
+                return True
+            time.sleep(0.25)
+    except Exception as e:
+        logger.warning(f"[Window] Could not activate '{title_keyword}': {e}")
+    return False
+
+
+# ─── Method 1: WhatsApp Desktop App ─────────────────────────────────────────
+
+def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 6, image_filename: str = None) -> bool:
+    """
+    Send via the WhatsApp Desktop app (Windows).
+    wait_time: seconds to wait for WhatsApp to open the chat (default: 6s)
+    """
+    try:
         phone_clean = phone_digits_only(phone)
-        
+
         has_image = False
         if image_filename:
             if copy_image_to_clipboard(image_filename):
@@ -85,43 +115,33 @@ def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12, image_f
         logger.info(f"[WA App] Opening WhatsApp Desktop for {phone_clean}…")
         os.startfile(uri)
 
-        # Wait for WhatsApp app to open and load the chat
-        logger.info(f"[WA App] Waiting {wait_time}s for WhatsApp app to load…")
-        time.sleep(wait_time)
-
-        # Bring WhatsApp to the front and ensure it is maximized
-        try:
-            wins = gw.getWindowsWithTitle('WhatsApp')
-            if wins:
-                win = wins[0]
-                win.maximize()
-                win.activate()
-                time.sleep(1)
-        except Exception as e:
-            logger.warning(f"[WA App] Could not activate window: {e}")
+        # Poll for WhatsApp window instead of sleeping a fixed amount
+        logger.info(f"[WA App] Waiting up to {wait_time}s for WhatsApp to load…")
+        found = _activate_window('WhatsApp', timeout=wait_time)
+        if not found:
+            logger.warning("[WA App] WhatsApp window not found in time — attempting keyboard anyway.")
+        else:
+            time.sleep(0.4)  # tiny settle after activation
 
         # Send
         if has_image:
             logger.info("[WA App] Pasting image and writing caption...")
             keyboard.send('ctrl+v')
-            time.sleep(1.5)  # Wait for attachment modal to display
-            
-            # Type message into the caption box
+            time.sleep(1.0)  # Wait for attachment modal (reduced from 1.5s)
+
             keyboard.write(message)
-            time.sleep(0.5)
-            
-            # Press enter to send image with caption
+            time.sleep(0.3)
+
             keyboard.send('enter')
-            time.sleep(1)
+            time.sleep(0.5)
             logger.info(f"[WA App] ✅ Image sent via WhatsApp Desktop to {phone_clean}")
         else:
             logger.info("[WA App] Pressing Enter to send...")
             keyboard.send('enter')
-            time.sleep(1)
+            time.sleep(0.4)
             keyboard.send('enter')
-            logger.info(f"[WA App] ✅ Enter pressed — message sent via WhatsApp Desktop to {phone_clean}")
+            logger.info(f"[WA App] ✅ Message sent via WhatsApp Desktop to {phone_clean}")
 
-        time.sleep(1)
         return True
 
     except Exception as e:
@@ -131,14 +151,14 @@ def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12, image_f
 
 # ─── Method 2: WhatsApp Web (Browser) ────────────────────────────────────────
 
-def send_via_whatsapp_web(phone: str, message: str, wait_time: int = 30, image_filename: str = None) -> bool:
+def send_via_whatsapp_web(phone: str, message: str, wait_time: int = 8, image_filename: str = None) -> bool:
     """
     Send via WhatsApp Web in the default browser.
+    wait_time: seconds to wait for WhatsApp Web to load (default: 8s)
     """
     try:
-        import pygetwindow as gw
         phone_clean = phone_digits_only(phone)
-        
+
         has_image = False
         if image_filename:
             if copy_image_to_clipboard(image_filename):
@@ -151,42 +171,31 @@ def send_via_whatsapp_web(phone: str, message: str, wait_time: int = 30, image_f
             logger.info(f"[WA Web] Opening: {url} (with image attachment)")
             webbrowser.open(url)
 
-            logger.info(f"[WA Web] Waiting {wait_time}s for WhatsApp Web to load…")
-            time.sleep(wait_time)
-
-            # Focus browser window
-            try:
-                titles = gw.getAllTitles()
-                wa_titles = [t for t in titles if 'WhatsApp' in t]
-                if wa_titles:
-                    win = gw.getWindowsWithTitle(wa_titles[0])[0]
-                    win.maximize()
-                    win.activate()
-                    time.sleep(1)
-            except Exception as e:
-                logger.warning(f"[WA Web] Could not activate window: {e}")
+            logger.info(f"[WA Web] Waiting up to {wait_time}s for WhatsApp Web to load…")
+            found = _activate_window('WhatsApp', timeout=wait_time)
+            if found:
+                time.sleep(0.4)
 
             logger.info("[WA Web] Pasting image and writing caption...")
             keyboard.send('ctrl+v')
-            time.sleep(2.0)  # Web might need a tiny bit longer to process clipboard
-            
-            # Type message
+            time.sleep(1.2)  # Web image processing (reduced from 2.0s)
+
             keyboard.write(message)
-            time.sleep(0.5)
-            
-            # Press enter to send image
+            time.sleep(0.3)
+
             keyboard.send('enter')
-            time.sleep(1)
+            time.sleep(0.5)
             logger.info(f"[WA Web] ✅ Image with caption sent to {phone_clean}")
             return True
         else:
+            # Text-only path: use pywhatkit with minimal wait
             import pywhatkit as kit
             logger.info(f"[WA Web] Sending via pywhatkit (wait={wait_time}s)…")
             kit.sendwhatmsg_instantly(
                 phone_no=phone_clean,
                 message=message,
                 wait_time=wait_time,
-                tab_close=False  # Do not close the tab so we don't interrupt the send process
+                tab_close=False
             )
             logger.info(f"[WA Web] ✅ Message sent to {phone_clean}")
             return True
@@ -243,7 +252,7 @@ def send_message(phone: str, message: str, method: str = 'app', image_filename: 
 # ─── Scheduler Job ────────────────────────────────────────────────────────────
 
 def check_and_send_wishes(app):
-    """Background job — runs every 30 seconds, sends due scheduled wishes."""
+    """Background job — runs every 5 seconds, sends due scheduled wishes."""
     with app.app_context():
         from models import db, Schedule
 
@@ -273,9 +282,9 @@ def start_scheduler(app):
         func=check_and_send_wishes,
         args=[app],
         trigger='interval',
-        seconds=30,
+        seconds=5,          # ⚡ was 30s — now checks every 5 seconds for near-instant delivery
         id='wish_checker',
         replace_existing=True
     )
     scheduler.start()
-    logger.info("[Scheduler] APScheduler started — checking every 30 seconds.")
+    logger.info("[Scheduler] APScheduler started — checking every 5 seconds.")
