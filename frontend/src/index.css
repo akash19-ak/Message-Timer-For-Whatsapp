@@ -4,23 +4,23 @@
    =========================== */
 
 :root {
-  /* Color palette – light mode */
-  --bg-primary: #f0f4ff;
+  /* Color palette – WhatsApp Light Mode */
+  --bg-primary: #efeae2;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
-  --bg-glass: rgba(255, 255, 255, 0.7);
+  --bg-glass: rgba(255, 255, 255, 0.85);
 
-  --accent-primary: #7c3aed;
-  --accent-secondary: #a855f7;
-  --accent-gradient: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #ec4899 100%);
-  --accent-glow: rgba(124, 58, 237, 0.25);
+  --accent-primary: #25d366;
+  --accent-secondary: #128c7e;
+  --accent-gradient: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+  --accent-glow: rgba(37, 211, 102, 0.25);
 
-  --text-primary: #1e1b4b;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: #111b21;
+  --text-secondary: #54656f;
+  --text-muted: #8696a0;
 
-  --border: rgba(124, 58, 237, 0.15);
-  --border-focus: #7c3aed;
+  --border: #d1d7db;
+  --border-focus: #25d366;
 
   --success: #10b981;
   --success-bg: #d1fae5;
@@ -29,9 +29,9 @@
   --warning: #f59e0b;
   --warning-bg: #fef3c7;
 
-  --shadow-sm: 0 2px 8px rgba(124, 58, 237, 0.08);
-  --shadow-md: 0 4px 24px rgba(124, 58, 237, 0.12);
-  --shadow-lg: 0 8px 40px rgba(124, 58, 237, 0.18);
+  --shadow-sm: 0 2px 4px rgba(11, 20, 26, 0.08);
+  --shadow-md: 0 4px 12px rgba(11, 20, 26, 0.12);
+  --shadow-lg: 0 8px 24px rgba(11, 20, 26, 0.18);
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -49,17 +49,22 @@
 
 /* Dark mode */
 [data-theme="dark"] {
-  --bg-primary: #0f0a1e;
-  --bg-secondary: #1a1135;
-  --bg-card: #1e1540;
-  --bg-glass: rgba(30, 21, 64, 0.8);
+  --bg-primary: #111b21;
+  --bg-secondary: #202c33;
+  --bg-card: #202c33;
+  --bg-glass: rgba(32, 44, 51, 0.85);
 
-  --text-primary: #f1f0ff;
-  --text-secondary: #a8a3c0;
-  --text-muted: #6d6890;
+  --accent-primary: #00a884;
+  --accent-secondary: #005c4b;
+  --accent-gradient: linear-gradient(135deg, #00a884 0%, #005c4b 100%);
+  --accent-glow: rgba(0, 168, 132, 0.25);
 
-  --border: rgba(168, 85, 247, 0.2);
-  --border-focus: #a855f7;
+  --text-primary: #e9edef;
+  --text-secondary: #8696a0;
+  --text-muted: #667781;
+
+  --border: #222e35;
+  --border-focus: #00a884;
 
   --success-bg: rgba(16, 185, 129, 0.15);
   --error-bg: rgba(239, 68, 68, 0.15);
@@ -92,17 +97,32 @@ body {
   line-height: 1.6;
 }
 
-/* Subtle background pattern */
+/* Subtle background pattern to mimic WhatsApp Web */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(124, 58, 237, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 20%, rgba(236, 72, 153, 0.05) 0%, transparent 50%),
-    radial-gradient(ellipse at 60% 80%, rgba(168, 85, 247, 0.04) 0%, transparent 40%);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.5;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Add WhatsApp top green band in light mode */
+body::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 127px;
+  background-color: var(--accent-secondary);
+  z-index: 0;
+}
+
+[data-theme="dark"] body::after {
+  display: none;
 }
 
 #root {
