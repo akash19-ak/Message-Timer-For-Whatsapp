@@ -5,6 +5,8 @@ import subprocess
 import webbrowser
 import urllib.parse
 import pyautogui
+import pyperclip
+import keyboard
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -37,36 +39,39 @@ def phone_digits_only(phone: str) -> str:
 def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12) -> bool:
     """
     Send via the WhatsApp Desktop app (Windows).
-    Uses the whatsapp:// URI scheme to open the installed WhatsApp app.
-    
-    Steps:
-      1. Build whatsapp://send?phone=<phone>&text=<message>
-      2. Open it with os.startfile() — launches WhatsApp Desktop
-      3. Wait for app to open and load the chat (wait_time seconds)
-      4. Click center of screen to focus the message input
-      5. Press Enter to send
     """
     try:
+        import pygetwindow as gw
+        
         phone_clean = phone_digits_only(phone)
         encoded_msg = urllib.parse.quote(message)
         uri = f"whatsapp://send?phone={phone_clean}&text={encoded_msg}"
 
         logger.info(f"[WA App] Opening WhatsApp Desktop for {phone_clean}…")
-
-        # Open the whatsapp:// URI — this launches the desktop app
         os.startfile(uri)
 
         # Wait for WhatsApp app to open and load the chat
         logger.info(f"[WA App] Waiting {wait_time}s for WhatsApp app to load…")
         time.sleep(wait_time)
 
-        # Do NOT click the screen, as whatsapp:// automatically focuses the input box.
-        # Clicking might accidentally remove focus.
+        # Bring WhatsApp to the front and ensure it is maximized
+        try:
+            wins = gw.getWindowsWithTitle('WhatsApp')
+            if wins:
+                win = wins[0]
+                win.maximize()
+                win.activate()
+                time.sleep(1)
+        except Exception as e:
+            logger.warning(f"[WA App] Could not activate window: {e}")
+
+        # Send Enter keystrokes to dispatch the message.
+        # DO NOT CLICK the screen, as it may unfocus the text box.
+        logger.info("[WA App] Pressing Enter to send...")
         
-        # Press Enter to send (sometimes needs a tiny delay or a second press to confirm)
-        pyautogui.press('enter')
+        keyboard.send('enter')
         time.sleep(1)
-        pyautogui.press('enter')
+        keyboard.send('enter')
         
         logger.info(f"[WA App] ✅ Enter pressed — message sent via WhatsApp Desktop to {phone_clean}")
 
@@ -83,33 +88,19 @@ def send_via_whatsapp_app(phone: str, message: str, wait_time: int = 12) -> bool
 def send_via_whatsapp_web(phone: str, message: str, wait_time: int = 30) -> bool:
     """
     Send via WhatsApp Web in the default browser.
-    Opens web.whatsapp.com with phone + text pre-filled, waits for page load,
-    then presses Enter. Does NOT close the tab automatically.
-
-    Requirements: Must be logged in to WhatsApp Web in the default browser.
     """
     try:
+        import pywhatkit as kit
         phone_clean = phone_digits_only(phone)
-        encoded_msg = urllib.parse.quote(message)
-        url = f"https://web.whatsapp.com/send?phone={phone_clean}&text={encoded_msg}"
+        logger.info(f"[WA Web] Sending via pywhatkit (wait={wait_time}s)…")
 
-        logger.info(f"[WA Web] Opening: {url}")
-        webbrowser.open(url)
-
-        # Give WhatsApp Web enough time to fully load the chat
-        logger.info(f"[WA Web] Waiting {wait_time}s for WhatsApp Web to load…")
-        time.sleep(wait_time)
-
-        # Do NOT click the screen, the URL parameter &text= focuses the chat input automatically
-        
-        # Press Enter to send
-        pyautogui.press('enter')
-        time.sleep(1)
-        pyautogui.press('enter')
-        
-        logger.info(f"[WA Web] ✅ Enter pressed — message sent via WhatsApp Web to {phone_clean}")
-
-        time.sleep(2)
+        kit.sendwhatmsg_instantly(
+            phone_no=phone_clean,
+            message=message,
+            wait_time=wait_time,
+            tab_close=False  # Do not close the tab so we don't interrupt the send process
+        )
+        logger.info(f"[WA Web] ✅ Message sent to {phone_clean}")
         return True
 
     except Exception as e:
